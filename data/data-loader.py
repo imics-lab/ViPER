@@ -187,12 +187,16 @@ def get_bloodmnist(data_root="./data", batch_size=64, image_size=224, **kw):
     return get_medmnist("bloodmnist", data_root, batch_size, image_size, **kw)
 
 
+def get_dermamnist(data_root="./data", batch_size=64, image_size=224, **kw):
+    return get_medmnist("dermamnist", data_root, batch_size, image_size, **kw)
+
 # ─── Unified registry ────────────────────────────────────────────────────────
 DATASET_REGISTRY = {
     "eurosat":     get_eurosat,
     "resisc45":    get_resisc45,
     "pathmnist":   get_pathmnist,
     "bloodmnist":  get_bloodmnist,
+    "dermamnist":  get_dermamnist,
 }
 
 DATASET_DEFAULTS = {
@@ -200,6 +204,7 @@ DATASET_DEFAULTS = {
     "resisc45":    dict(image_size=224, batch_size=32),
     "pathmnist":   dict(image_size=224, batch_size=64),
     "bloodmnist":  dict(image_size=224, batch_size=64),
+    "dermamnist":  dict(image_size=224, batch_size=64),
 }
 
 
