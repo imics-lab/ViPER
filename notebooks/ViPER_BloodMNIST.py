@@ -613,16 +613,16 @@ def train_one(pe_type, model_params, viper_cfg,
     }
 
 
-# ───────────── Experiment configuration ─────────────
-EPOCHS         = 50     # Set to 3 for a smoke test
-BATCH_SIZE     = 64
+# ───────────── Experiment configuration (BloodMNIST 224x224) ─────────────
+EPOCHS         = 50
+BATCH_SIZE     = 32     # Lower than EuroSAT to fit 224x224 in memory
 SEED           = 42
 
-# ViT-Tiny (good for ablation; fits T4 GPU comfortably)
-PATCH_SIZE     = 8
+# ViT-Tiny adapted for 224x224
+PATCH_SIZE     = 16     # 224/16 = 14 -> 196 tokens (standard ViT)
 D_MODEL        = 192
 NUM_LAYERS     = 6
-NUM_HEADS      = 3      # head_dim = 64
+NUM_HEADS      = 3
 MLP_DIM        = 768
 DROPOUT        = 0.1
 
@@ -630,16 +630,31 @@ DROPOUT        = 0.1
 LR             = 3e-4
 WEIGHT_DECAY   = 0.05
 
-# Output dir
-OUT_DIR = Path("./viper_results")
+# Output dir (separate from EuroSAT)
+OUT_DIR = Path("./viper_results_bloodmnist")
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 print(f"Outputs will be saved to: {OUT_DIR.resolve()}")
 
 
-train_loader, val_loader, test_loader, num_classes, img_h, img_w = \
-    get_eurosat("./data", BATCH_SIZE, image_size=64, seed=SEED, num_workers=2)
+# ─── Load BloodMNIST from data-loader registry ─────────────────────────────
+import sys
+sys.path.insert(0, str(Path("../data").resolve()))
+from importlib import import_module
+import importlib.util
+spec = importlib.util.spec_from_file_location("data_loader", "../data/data-loader.py")
+data_loader_mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(data_loader_mod)
+get_dataset = data_loader_mod.get_dataset
 
-print(f"EuroSAT loaded — {num_classes} classes, {img_h}x{img_w}")
+# BloodMNIST needs medmnist cache dir
+import os
+os.makedirs("./data", exist_ok=True)
+
+train_loader, val_loader, test_loader, num_classes, img_h, img_w = \
+    get_dataset("bloodmnist", data_root="./data", batch_size=BATCH_SIZE,
+                image_size=224, seed=SEED, num_workers=2)
+
+print(f"BloodMNIST loaded — {num_classes} classes, {img_h}x{img_w}")
 print(f"  Train: {len(train_loader.dataset):,}")
 print(f"  Val:   {len(val_loader.dataset):,}")
 print(f"  Test:  {len(test_loader.dataset):,}")
@@ -710,8 +725,17 @@ def plot_ablation(results, title):
 BASELINES = ["none", "learned", "sincos2d", "rope2d",
              "relative2d", "cpe", "irpe"]
 
+BASELINE_RUNS_DIR = OUT_DIR / "baseline_runs"
+BASELINE_RUNS_DIR.mkdir(parents=True, exist_ok=True)
+
 baseline_results = []
 for pe in BASELINES:
+    run_path = BASELINE_RUNS_DIR / f"{pe}_seed{SEED}.json"
+    if run_path.exists():
+        print(f"SKIP baseline {pe} (already done)")
+        with open(run_path) as f:
+            baseline_results.append(json.load(f))
+        continue
     print(f"\n{'='*60}\nBASELINE: {pe.upper()}\n{'='*60}")
     try:
         r = train_one(pe, MODEL_PARAMS, None,
@@ -720,44 +744,48 @@ for pe in BASELINES:
                       device=DEVICE, num_classes=num_classes, seed=SEED,
                       name=pe)
         baseline_results.append(r)
+        with open(run_path, "w") as f:
+            json.dump(r, f, indent=2, default=str)
     except Exception as e:
         print(f"[ERROR] {pe}: {e}")
 
 df_baselines = save_results(baseline_results, "baselines")
 print("\n=== BASELINE RESULTS ===")
 print(df_baselines)
-plot_ablation(baseline_results, "Baseline PEs on EuroSAT")
+plot_ablation(baseline_results, "Baseline PEs on BloodMNIST")
 
 
 def stage1_configs():
+    """Top-3 Stage 1 winners from BloodMNIST, re-run on BloodMNIST."""
     base = dict(coef_to_patch="avg_pool", wavelet="db4",
                 channel_mode="gray", level_combine="alw", sca=True)
-    runs = []
-    # Q1: dwt_location
-    for loc in ["raw_image", "per_patch", "patch_embedding"]:
-        runs.append((f"Q1_{loc}", ViPERConfig(
-            dwt_location=loc, injection="additive", n_levels=3,
-            subband_fusion="gated", **base)))
-    # Q3: injection (raw_image fixed; additive in Q1 already)
-    for inj in ["rotary", "concat"]:
-        runs.append((f"Q3_{inj}", ViPERConfig(
-            dwt_location="raw_image", injection=inj, n_levels=3,
-            subband_fusion="gated", **base)))
-    # Q4: n_levels (3 already covered)
-    for L in [1, 2, 4]:
-        runs.append((f"Q4_L{L}", ViPERConfig(
-            dwt_location="raw_image", injection="additive", n_levels=L,
-            subband_fusion="gated", **base)))
-    # Q7: subband_fusion (gated already covered)
-    for sf in ["concat", "weighted_sum"]:
-        runs.append((f"Q7_{sf}", ViPERConfig(
+    return [
+        # Stage 1 EuroSAT winner (95.06%)
+        ("Q1_raw_image", ViPERConfig(
             dwt_location="raw_image", injection="additive", n_levels=3,
-            subband_fusion=sf, **base)))
-    return runs
+            subband_fusion="gated", **base)),
+        # Stage 1 EuroSAT #2 (95.04%)
+        ("Q7_weighted_sum", ViPERConfig(
+            dwt_location="raw_image", injection="additive", n_levels=3,
+            subband_fusion="weighted_sum", **base)),
+        # Stage 1 EuroSAT #3 (94.84%)
+        ("Q4_L4", ViPERConfig(
+            dwt_location="raw_image", injection="additive", n_levels=4,
+            subband_fusion="gated", **base)),
+    ]
 
+
+STAGE1_RUNS_DIR = OUT_DIR / "stage1_runs"
+STAGE1_RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
 stage1_results = []
 for name, cfg in stage1_configs():
+    run_path = STAGE1_RUNS_DIR / f"{name}_seed{SEED}.json"
+    if run_path.exists():
+        print(f"SKIP stage1 {name} (already done)")
+        with open(run_path) as f:
+            stage1_results.append(json.load(f))
+        continue
     print(f"\n{'='*60}\n{name}\n{'='*60}")
     print(f"Config: {cfg}")
     try:
@@ -767,6 +795,8 @@ for name, cfg in stage1_configs():
                       device=DEVICE, num_classes=num_classes, seed=SEED,
                       name=name)
         stage1_results.append(r)
+        with open(run_path, "w") as f:
+            json.dump(r, f, indent=2, default=str)
     except Exception as e:
         print(f"[ERROR] {name}: {e}")
 
@@ -776,64 +806,6 @@ print(df_stage1)
 plot_ablation(stage1_results, "ViPER Stage 1 (Q1, Q3, Q4, Q7)")
 
 
-# CPU-mode recovery cell — paste into a fresh notebook
-from pathlib import Path
-import json
-
-OUT_DIR = Path("./viper_results")  # adjust if needed
-
-# Check what's still on disk
-if OUT_DIR.exists():
-    print("Files found:")
-    for f in sorted(OUT_DIR.iterdir()):
-        print(f"  {f.name}  ({f.stat().st_size:,} bytes)")
-else:
-    print(f"{OUT_DIR} not found. You'll need to upload your saved files.")
-
-# ─── Reconstruct Stage 1 results from the printed table ────────────────────
-from pathlib import Path
-from dataclasses import dataclass, asdict
-import json
-
-OUT_DIR = Path("./viper_results")
-OUT_DIR.mkdir(parents=True, exist_ok=True)
-
-# Manually transcribed from your Stage 1 printed table
-stage1_data = [
-    # name,                pe_type,  test_acc, test_f1,  test_auc, best_val_acc, pe_params, epoch_t
-    ("Q1_raw_image",       "viper",  0.950617, 0.949539, 0.997345, 0.945679,     79492,     30.018584),
-    ("Q7_weighted_sum",    "viper",  0.950370, 0.949502, 0.996331, 0.944691,      3472,     27.886025),
-    ("Q4_L4",              "viper",  0.948395, 0.947490, 0.996851, 0.943704,     80261,     30.104004),
-    ("Q3_rotary",          "viper",  0.947160, 0.946769, 0.997212, 0.947901,     79492,     29.502028),
-    ("Q1_per_patch",       "viper",  0.946914, 0.945713, 0.996596, 0.944198,     79492,     57.041156),
-    ("Q4_L2",              "viper",  0.946667, 0.945507, 0.997155, 0.946914,     78723,     27.544788),
-    ("Q4_L1",              "viper",  0.946420, 0.945566, 0.997413, 0.946667,     77954,     26.122781),
-    ("Q1_patch_embedding", "viper",  0.945432, 0.944599, 0.996766, 0.947901,    116164,     29.513221),
-    ("Q3_concat",          "viper",  0.944444, 0.943179, 0.996218, 0.940000,    153412,     28.985127),
-    ("Q7_concat",          "viper",  0.934568, 0.933464, 0.996527, 0.936543,    151108,     27.632619),
-]
-
-stage1_results = []
-for name, pe_type, acc, f1, auc, val_acc, pe_p, ep_t in stage1_data:
-    stage1_results.append({
-        "name":         name,
-        "pe_type":      pe_type,
-        "viper_cfg":    None,   # filled in below
-        "seed":         42,
-        "n_params":     None,
-        "pe_params":    pe_p,
-        "best_val_acc": val_acc,
-        "test":         {"acc": acc, "f1": f1, "auc": auc, "loss": None},
-        "history":      None,
-        "avg_epoch_t":  ep_t,
-    })
-
-# Save so future sessions don't need this reconstruction
-with open(OUT_DIR / "stage1_results.json", "w") as f:
-    json.dump(stage1_results, f, indent=2)
-
-print(f"Reconstructed {len(stage1_results)} Stage 1 runs.")
-print(f"Saved: {OUT_DIR / 'stage1_results.json'}")
 
 import matplotlib.pyplot as plt
 import math
@@ -854,8 +826,8 @@ for a, vals, ttl in zip(ax, [accs, f1s, aucs], ["Accuracy", "Macro F1", "AUC (OV
                f"{v:.3f}", ha="center", fontsize=7)
 fig.suptitle("ViPER Stage 1 (Q1, Q3, Q4, Q7)", fontweight="bold")
 plt.tight_layout()
-plt.savefig("./viper_results/stage1.png", dpi=150, bbox_inches="tight")
-plt.show()
+plt.savefig(OUT_DIR / "stage1.png", dpi=150, bbox_inches="tight")
+plt.close()
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -933,7 +905,7 @@ fig.legend(handles=legend_handles, loc="upper center",
 
 fig.suptitle("ViPER Stage 1 Ablation on EuroSAT", fontsize=14, fontweight="bold", y=1.02)
 plt.tight_layout()
-plt.savefig("./viper_results/stage1_v2.png", dpi=200, bbox_inches="tight")
+plt.savefig(OUT_DIR / "stage1_v2.png", dpi=200, bbox_inches="tight")
 plt.show()
 
 import shutil
@@ -954,69 +926,6 @@ print(f"  config: {winner_cfg}")
 with open(OUT_DIR / "stage1_winner.json", "w") as f:
     json.dump({"name": winner["name"], "cfg": asdict(winner_cfg)}, f, indent=2)
 
-
-def stage2_configs(w):
-    runs = []
-    # Q5: wavelet
-    for wav in ["haar", "sym4"]:
-        c = ViPERConfig(**asdict(w)); c.wavelet = wav
-        runs.append((f"Q5_{wav}", c))
-    # Q6: channel_mode (only meaningful if dwt_location != patch_embedding)
-    if w.dwt_location != "patch_embedding":
-        for cm in ["per_channel_concat", "learnable_proj"]:
-            c = ViPERConfig(**asdict(w)); c.channel_mode = cm
-            runs.append((f"Q6_{cm}", c))
-    # Q8: level_combine
-    for lc in ["sum", "weighted"]:
-        c = ViPERConfig(**asdict(w)); c.level_combine = lc
-        runs.append((f"Q8_{lc}", c))
-    # SCA off
-    c = ViPERConfig(**asdict(w)); c.sca = False
-    runs.append(("SCA_off", c))
-    return runs
-
-
-stage2_results = []
-for name, cfg in stage2_configs(winner_cfg):
-    print(f"\n{'='*60}\n{name}\n{'='*60}")
-    print(f"Config: {cfg}")
-    try:
-        r = train_one("viper", MODEL_PARAMS, cfg,
-                      train_loader, val_loader, test_loader,
-                      n_epochs=EPOCHS, lr=LR, weight_decay=WEIGHT_DECAY,
-                      device=DEVICE, num_classes=num_classes, seed=SEED,
-                      name=name)
-        stage2_results.append(r)
-    except Exception as e:
-        print(f"[ERROR] {name}: {e}")
-
-df_stage2 = save_results(stage2_results, "stage2")
-print("\n=== STAGE 2 RESULTS ===")
-print(df_stage2)
-plot_ablation(stage2_results, "ViPER Stage 2 (Q5, Q6, Q8, SCA)")
-
-
-all_results = baseline_results + stage1_results + stage2_results
-df_all = save_results(all_results, "all")
-print(f"\n=== ALL {len(all_results)} RUNS ===")
-print(df_all)
-
-# Top-5
-print("\n=== TOP 5 ===")
-print(df_all.head(5))
-
-# Best ViPER vs best baseline
-viper_runs    = [r for r in all_results if r["pe_type"] == "viper"]
-baseline_runs_ = [r for r in all_results if r["pe_type"] != "viper"]
-if viper_runs and baseline_runs_:
-    best_v = max(viper_runs, key=lambda r: r["test"]["acc"])
-    best_b = max(baseline_runs_, key=lambda r: r["test"]["acc"])
-    delta = (best_v["test"]["acc"] - best_b["test"]["acc"]) * 100
-    print(f"\nBest ViPER:    {best_v['name']:25s}  acc={best_v['test']['acc']:.4f}")
-    print(f"Best baseline: {best_b['name']:25s}  acc={best_b['test']['acc']:.4f}")
-    print(f"Delta:                                      {delta:+.2f} pp")
-
-print(f"\nAll outputs saved to: {OUT_DIR.resolve()}")
 
 
 # Uncomment in Colab to download results as a zip
