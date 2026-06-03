@@ -1036,19 +1036,20 @@ def get_suite(suite_name: str) -> List[Tuple[str, Optional[ViPERConfig], str]]:
             cfg.d_pe = d
             runs.append(("viper", cfg, f"dpe_{d}"))
 
+    elif suite_name == "contenders":
+        # Top 3 baselines + ViPER for multi-seed comparison
+        runs.append(("cpe", None, "cpe"))
+        runs.append(("sincos2d", None, "sincos2d"))
+        runs.append(("none", None, "none"))
+        cfg = get_default_viper_cfg()
+        runs.append(("viper", cfg, "viper_pre_ffn"))
+
     elif suite_name == "final":
         # Winner config — caller adds seeds outside
         cfg = get_default_viper_cfg()
         runs = [("viper", cfg, "viper_final")]
         for pe in ["cpe", "relative2d", "none"]:   # strongest 3 baselines
             runs.append((pe, None, pe))
-    elif suite_name == "contenders":
-        # Top 3 baselines (from single-seed results) + ViPER for multi-seed comparison
-        runs.append(("cpe", None, "cpe"))
-        runs.append(("sincos2d", None, "sincos2d"))
-        runs.append(("none", None, "none"))
-        cfg = get_default_viper_cfg()
-        runs.append(("viper", cfg, "viper_pre_ffn"))
 
     else:
         raise ValueError(f"Unknown suite: {suite_name}")
@@ -1082,7 +1083,7 @@ def main():
                         help="Override patch size. Defaults: 8 for eurosat, 16 for 224x224.")
     parser.add_argument("--suite", default="main",
                         choices=["smoke", "baselines", "main", "injection",
-                                 "components", "wavelets", "levels", "d_pe", "final"])
+                                 "components", "wavelets", "levels", "d_pe", "contenders", "final"])
     parser.add_argument("--seeds", type=int, nargs="+", default=[42])
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch_size", type=int, default=None)
