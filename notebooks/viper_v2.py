@@ -1042,6 +1042,13 @@ def get_suite(suite_name: str) -> List[Tuple[str, Optional[ViPERConfig], str]]:
         runs = [("viper", cfg, "viper_final")]
         for pe in ["cpe", "relative2d", "none"]:   # strongest 3 baselines
             runs.append((pe, None, pe))
+    elif suite_name == "contenders":
+        # Top 3 baselines (from single-seed results) + ViPER for multi-seed comparison
+        runs.append(("cpe", None, "cpe"))
+        runs.append(("sincos2d", None, "sincos2d"))
+        runs.append(("none", None, "none"))
+        cfg = get_default_viper_cfg()
+        runs.append(("viper", cfg, "viper_pre_ffn"))
 
     else:
         raise ValueError(f"Unknown suite: {suite_name}")
