@@ -84,7 +84,7 @@ class KvasirSegDataset(Dataset):
                 mask = TF.vflip(mask)
             # Random rotation (90° steps) preserves binary mask shapes
             if np.random.rand() < 0.5:
-                k = np.random.choice([1, 2, 3])
+                k = int(np.random.choice([1, 2, 3]))
                 image = TF.rotate(image, 90 * k)
                 mask = TF.rotate(mask, 90 * k)
             # Color jitter on image only
