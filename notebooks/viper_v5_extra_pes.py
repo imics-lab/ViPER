@@ -238,7 +238,7 @@ class CustomAttention(nn.Module):
         self.pe_type = pe_type
         self.H_p, self.W_p = H_p, W_p
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, attn_mask=None, is_causal=False) -> torch.Tensor:
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim)
         qkv = qkv.permute(2, 0, 3, 1, 4)        # (3, B, H, N, hd)
