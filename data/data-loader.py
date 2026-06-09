@@ -1,4 +1,4 @@
-# !pip install -q medmnist
+# !pip install -q medmnist datasets
 
 """
 viper_datasets.py
@@ -7,6 +7,15 @@ Unified dataset loaders for ViPER experiments.
 
 Every loader returns:
     (train_loader, val_loader, test_loader, num_classes, image_h, image_w)
+
+Datasets:
+  • EuroSAT      — satellite (10 classes)
+  • RESISC45     — remote sensing (45 classes, HuggingFace timm/resisc45)
+  • PathMNIST    — histopathology (9 classes, MedMNIST v2)
+  • BloodMNIST   — blood cells (8 classes, MedMNIST v2)
+  • DermaMNIST   — dermatology (7 classes, MedMNIST v2)
+  • TissueMNIST  — kidney microscopy (8 classes, MedMNIST v2) [NEW]
+  • DTD          — describable textures (47 classes, torchvision) [NEW]
 """
 import math
 from pathlib import Path
@@ -15,7 +24,7 @@ from typing import Tuple
 import torch
 import torchvision.transforms as T
 from torch.utils.data import DataLoader, Dataset, Subset
-from torchvision.datasets import EuroSAT, CIFAR100
+from torchvision.datasets import EuroSAT, CIFAR100, DTD
 
 # ─── Constants ───────────────────────────────────────────────────────────────
 SEED = 42
@@ -127,7 +136,7 @@ def get_resisc45(data_root="./data", batch_size=32, image_size=224,
             45, image_size, image_size)
 
 
-# ─── 3. MedMNIST family (PathMNIST, BloodMNIST, ...) ─────────────────────────
+# ─── 3. MedMNIST family (PathMNIST, BloodMNIST, ..., TissueMNIST) ───────────
 class _MedMNISTWrap(Dataset):
     """MedMNIST returns labels as shape (1,) ndarray; squeeze to int."""
     def __init__(self, ds): self.ds = ds
@@ -140,7 +149,7 @@ class _MedMNISTWrap(Dataset):
 def get_medmnist(name: str, data_root="./data", batch_size=64,
                  image_size=224, seed=SEED, num_workers=2):
     """
-    name: 'pathmnist' | 'bloodmnist' | 'dermamnist' | etc.
+    name: 'pathmnist' | 'bloodmnist' | 'dermamnist' | 'tissuemnist' | etc.
     See https://medmnist.com/ for full list.
     """
     import medmnist
@@ -190,6 +199,42 @@ def get_bloodmnist(data_root="./data", batch_size=64, image_size=224, **kw):
 def get_dermamnist(data_root="./data", batch_size=64, image_size=224, **kw):
     return get_medmnist("dermamnist", data_root, batch_size, image_size, **kw)
 
+
+def get_tissuemnist(data_root="./data", batch_size=64, image_size=224, **kw):
+    """TissueMNIST — kidney microscopy, 8 classes, 236k images."""
+    return get_medmnist("tissuemnist", data_root, batch_size, image_size, **kw)
+
+
+# ─── 4. DTD (Describable Textures, 47 classes) ───────────────────────────────
+def get_dtd(data_root="./data", batch_size=32, image_size=224,
+            seed=SEED, num_workers=2):
+    """DTD — 47 texture categories, ~5640 images, official train/val/test."""
+    train_tf = T.Compose([
+        T.Resize((image_size, image_size)),
+        T.RandomHorizontalFlip(),
+        T.RandomVerticalFlip(),
+        T.ColorJitter(0.2, 0.2, 0.1),
+        T.ToTensor(),
+        T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+    ])
+    eval_tf = T.Compose([
+        T.Resize((image_size, image_size)),
+        T.ToTensor(),
+        T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+    ])
+
+    # DTD uses partition 1 by convention; auto-downloads on first use
+    tr_ds = DTD(root=data_root, split="train", partition=1,
+                download=True, transform=train_tf)
+    va_ds = DTD(root=data_root, split="val", partition=1,
+                download=False, transform=eval_tf)
+    te_ds = DTD(root=data_root, split="test", partition=1,
+                download=False, transform=eval_tf)
+
+    return (*make_loaders(tr_ds, va_ds, te_ds, batch_size, num_workers),
+            47, image_size, image_size)
+
+
 # ─── Unified registry ────────────────────────────────────────────────────────
 DATASET_REGISTRY = {
     "eurosat":     get_eurosat,
@@ -197,6 +242,8 @@ DATASET_REGISTRY = {
     "pathmnist":   get_pathmnist,
     "bloodmnist":  get_bloodmnist,
     "dermamnist":  get_dermamnist,
+    "tissuemnist": get_tissuemnist,
+    "dtd":         get_dtd,
 }
 
 DATASET_DEFAULTS = {
@@ -205,6 +252,8 @@ DATASET_DEFAULTS = {
     "pathmnist":   dict(image_size=224, batch_size=64),
     "bloodmnist":  dict(image_size=224, batch_size=64),
     "dermamnist":  dict(image_size=224, batch_size=64),
+    "tissuemnist": dict(image_size=224, batch_size=64),
+    "dtd":         dict(image_size=224, batch_size=32),
 }
 
 
@@ -217,7 +266,16 @@ def get_dataset(name: str, data_root="./data", **kwargs):
     defaults["data_root"] = data_root
     return DATASET_REGISTRY[name](**defaults)
 
-for name in ["bloodmnist"]:
-    train, val, test, n_cls, h, w = get_dataset(name)
-    print(f"{name}: {n_cls} classes, {h}×{w}, "
-          f"tr={len(train.dataset):,} va={len(val.dataset):,} te={len(test.dataset):,}")
+
+# ─── Smoke test on import ────────────────────────────────────────────────────
+if __name__ == "__main__":
+    import sys
+    # Test specific dataset(s) passed on command line, or default to bloodmnist
+    if len(sys.argv) > 1:
+        names = sys.argv[1:]
+    else:
+        names = ["bloodmnist"]
+    for name in names:
+        train, val, test, n_cls, h, w = get_dataset(name)
+        print(f"{name}: {n_cls} classes, {h}×{w}, "
+              f"tr={len(train.dataset):,} va={len(val.dataset):,} te={len(test.dataset):,}")
