@@ -136,7 +136,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="bloodmnist",
                         choices=["eurosat", "bloodmnist", "dermamnist",
-                                 "pathmnist", "resisc45", "dtd"])
+                                 "pathmnist", "resisc45", "dtd", "tissuemnist"])
     parser.add_argument("--pe", choices=["rope_mixed", "alibi2d"], required=True,
                         help="Which internal PE to use")
     parser.add_argument("--image_size", type=int, default=224)

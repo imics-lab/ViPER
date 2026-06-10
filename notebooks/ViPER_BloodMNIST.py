@@ -614,7 +614,7 @@ def train_one(pe_type, model_params, viper_cfg,
 
 
 # ───────────── Experiment configuration (BloodMNIST 224x224) ─────────────
-EPOCHS         = 50
+EPOCHS         = 20
 BATCH_SIZE     = 32     # Lower than EuroSAT to fit 224x224 in memory
 SEED           = 42
 
@@ -903,17 +903,10 @@ legend_handles.append(Patch(facecolor="white", edgecolor="black", hatch="//",
 fig.legend(handles=legend_handles, loc="upper center",
            bbox_to_anchor=(0.5, 0.98), ncol=5, fontsize=10, frameon=False)
 
-fig.suptitle("ViPER Stage 1 Ablation on EuroSAT", fontsize=14, fontweight="bold", y=1.02)
+fig.suptitle("ViPER Stage 1 on BloodMNIST", fontsize=14, fontweight="bold", y=1.02)
 plt.tight_layout()
 plt.savefig(OUT_DIR / "stage1_v2.png", dpi=200, bbox_inches="tight")
 plt.show()
-
-import shutil
-from google.colab import files
-
-shutil.make_archive("viper_results", "zip", "./viper_results")
-files.download("viper_results.zip")
-print("Downloaded viper_results.zip — keep this safe.")
 
 # Determine winner
 winner = max(stage1_results,
@@ -928,10 +921,5 @@ with open(OUT_DIR / "stage1_winner.json", "w") as f:
 
 
 
-# Uncomment in Colab to download results as a zip
-# import shutil
-# shutil.make_archive("viper_results", "zip", OUT_DIR)
-# from google.colab import files
-# files.download("viper_results.zip")
-print("To download: uncomment the lines above (requires running in Colab).")
 
+print(f'\nDone. All outputs in: {OUT_DIR.resolve()}')

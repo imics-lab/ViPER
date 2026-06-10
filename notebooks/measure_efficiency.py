@@ -191,3 +191,20 @@ def main():
 
 if __name__ == "__main__":
     main()
+def measure_viper_flops_manual(model, x):
+    """Manual FLOPs for ViPER:
+       - Backbone (DeiT-Tiny): get FLOPs from a NoPE counterpart
+       - DWT: estimate as 2 * H * W * J * filter_length (Daubechies db4 = 8 taps)
+       - Channel proj + gating + patch agg + linear: small constants
+    """
+    H, W = x.shape[-2:]
+    # DWT FLOPs estimate: 2*H*W*J*8 for db4
+    # (J levels, each does a 1D conv twice for rows + cols)
+    J = 3
+    filter_len = 8  # db4
+    dwt_flops = 2 * H * W * J * filter_len * 4  # mult+add, 2 channels per pass
+    # IDWT (if used) is symmetric: same cost
+    # Gating + projections: ~ d_pe^2 * n_subbands ≈ 32*32*10 = 10k FLOPs (tiny)
+    # Patch aggregation conv: d_pe * d_model * patch_size^2 = 32*192*256 = 1.5M FLOPs
+    extras_flops = 32 * 192 * 256 + 32 * 32 * 10
+    return dwt_flops + extras_flops

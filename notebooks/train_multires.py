@@ -301,7 +301,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="bloodmnist",
                         choices=["eurosat", "bloodmnist", "dermamnist",
-                                 "pathmnist", "resisc45", "dtd"])
+                                 "pathmnist", "resisc45", "dtd", "tissuemnist"])
     parser.add_argument("--base_image_size", type=int, default=224,
                         help="Canonical resolution for model construction and val")
     parser.add_argument("--patch_size", type=int, default=16)
