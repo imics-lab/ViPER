@@ -634,7 +634,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="bloodmnist",
                         choices=["eurosat", "bloodmnist", "dermamnist",
-                                 "pathmnist", "resisc45", "dtd", "tissuemnist"])
+                                 "pathmnist", "resisc45", "dtd", "tissuemnist", "flowers102", "aid"])
     parser.add_argument("--image_size", type=int, default=224,
                         help="Image size (default 224 for DeiT-Tiny)")
     parser.add_argument("--patch_size", type=int, default=16,

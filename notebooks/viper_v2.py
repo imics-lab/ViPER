@@ -1076,7 +1076,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="eurosat",
                         choices=["eurosat", "bloodmnist", "dermamnist",
-                                 "pathmnist", "resisc45", "dtd", "tissuemnist"])
+                                 "pathmnist", "resisc45", "dtd", "tissuemnist", "flowers102", "aid"])
     parser.add_argument("--image_size", type=int, default=None,
                         help="Override default image size for the dataset.")
     parser.add_argument("--patch_size", type=int, default=None,

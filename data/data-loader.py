@@ -195,6 +195,46 @@ def get_tissuemnist(data_root="./data", batch_size=64, image_size=224, **kw):
     """TissueMNIST — kidney microscopy, 8 classes, 236k images."""
     return get_medmnist("tissuemnist", data_root, batch_size, image_size, **kw)
 
+
+
+
+
+def get_flowers102(data_root="./data", batch_size=32, image_size=224,
+                   seed=SEED, num_workers=2):
+    """Oxford Flowers-102 — 102 flower species, ~8k images, native ~500-700px.
+
+    Uses torchvision's Flowers102. Note: dataset convention is unusual ---
+    'train' is 1,020 images, 'val' is 1,020, 'test' is 6,149. We follow the
+    convention used by most ViT papers: use 'test' as our train set, since
+    the 1,020-image 'train' split is too small to train ViTs from scratch.
+    """
+    from torchvision.datasets import Flowers102
+    train_tf = T.Compose([
+        T.Resize((image_size, image_size)),
+        T.RandomHorizontalFlip(),
+        T.RandomVerticalFlip(),
+        T.ColorJitter(0.2, 0.2, 0.1),
+        T.ToTensor(),
+        T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+    ])
+    eval_tf = T.Compose([
+        T.Resize((image_size, image_size)),
+        T.ToTensor(),
+        T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+    ])
+
+    # Use 'test' as train, 'val' as val, 'train' as test (ViT convention)
+    tr_ds = Flowers102(root=data_root, split="test", download=True,
+                        transform=train_tf)
+    va_ds = Flowers102(root=data_root, split="val", download=True,
+                        transform=eval_tf)
+    te_ds = Flowers102(root=data_root, split="train", download=True,
+                        transform=eval_tf)
+
+    return (*make_loaders(tr_ds, va_ds, te_ds, batch_size, num_workers),
+            102, image_size, image_size)
+
+
 # ─── Unified registry ────────────────────────────────────────────────────────
 
 def get_dtd(data_root="./data", batch_size=32, image_size=224,
@@ -239,6 +279,7 @@ DATASET_REGISTRY = {
     "dermamnist":  get_dermamnist,
     "tissuemnist": get_tissuemnist,
     "dtd":         get_dtd,
+    "flowers102":  get_flowers102,
 }
 
 DATASET_DEFAULTS = {
@@ -249,6 +290,7 @@ DATASET_DEFAULTS = {
     "dermamnist":  dict(image_size=224, batch_size=64),
     "tissuemnist": dict(image_size=224, batch_size=64),
     "dtd":         dict(image_size=224, batch_size=32),
+    "flowers102":  dict(image_size=224, batch_size=32),
 }
 
 
