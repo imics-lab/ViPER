@@ -342,7 +342,7 @@ class DeiTWithCustomPE(nn.Module):
     """
     def __init__(self, num_classes: int, image_size: int, patch_size: int,
                  pe_type: str, viper_cfg: Optional[ViPERConfig] = None,
-                 num_blocks_for_peg: int = 12):
+                 num_blocks_for_peg: int = 12, pretrained: bool = True):
         super().__init__()
         self.pe_type = pe_type
         self.viper_cfg = viper_cfg
@@ -352,7 +352,7 @@ class DeiTWithCustomPE(nn.Module):
         # Load pretrained DeiT-Tiny
         self.backbone = timm.create_model(
             "deit_tiny_patch16_224",
-            pretrained=True,
+            pretrained=pretrained,
             num_classes=num_classes,
             img_size=image_size,
         )
@@ -495,11 +495,13 @@ def train_one_v5(pe_type, viper_cfg, train_loader, val_loader, test_loader,
                  image_size, patch_size, num_classes,
                  n_epochs=30, lr=3e-5, weight_decay=0.05,
                  device=DEVICE, seed=42, verbose=True, name=None,
-                 save_checkpoint_path: Optional[Path] = None):
+                 save_checkpoint_path: Optional[Path] = None,
+                 pretrained: bool = True):
     set_seed(seed)
     model = DeiTWithCustomPE(
         num_classes=num_classes, image_size=image_size,
         patch_size=patch_size, pe_type=pe_type, viper_cfg=viper_cfg,
+        pretrained=pretrained,
     ).to(device)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
@@ -649,6 +651,9 @@ def main():
     parser.add_argument("--data_root", default="./data")
     parser.add_argument("--out_dir", default=None)
     parser.add_argument("--num_workers", type=int, default=2)
+    parser.add_argument("--from_scratch", action="store_true",
+                        help="Train ViT-Tiny from scratch (random init) instead of "
+                             "loading pretrained DeiT-Tiny weights.")
     parser.add_argument("--save_checkpoints", action="store_true",
                         help="Save best checkpoints for multi-res eval later")
     args = parser.parse_args()
@@ -707,6 +712,7 @@ def main():
                     lr=args.lr, weight_decay=args.weight_decay,
                     device=DEVICE, seed=seed, name=run_id,
                     save_checkpoint_path=ckpt_path,
+                    pretrained=not args.from_scratch,
                 )
                 all_results.append(r)
                 with open(run_path, "w") as f:

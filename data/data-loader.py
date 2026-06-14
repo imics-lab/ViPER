@@ -235,6 +235,40 @@ def get_flowers102(data_root="./data", batch_size=32, image_size=224,
             102, image_size, image_size)
 
 
+
+def get_fgvc_aircraft(data_root="./data", batch_size=32, image_size=224,
+                     seed=SEED, num_workers=2):
+    """FGVC Aircraft — 100 fine-grained aircraft types, ~10k images, native ~1000+px.
+
+    Auto-downloads via torchvision (~3 GB). Standard train/val/test splits.
+    Uses the 'variant' label (100 classes, finest granularity).
+    """
+    from torchvision.datasets import FGVCAircraft
+
+    train_tf = T.Compose([
+        T.Resize((image_size, image_size)),
+        T.RandomHorizontalFlip(),
+        T.ColorJitter(0.2, 0.2, 0.1),
+        T.ToTensor(),
+        T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+    ])
+    eval_tf = T.Compose([
+        T.Resize((image_size, image_size)),
+        T.ToTensor(),
+        T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+    ])
+
+    tr_ds = FGVCAircraft(root=data_root, split="train", annotation_level="variant",
+                          download=True, transform=train_tf)
+    va_ds = FGVCAircraft(root=data_root, split="val", annotation_level="variant",
+                          download=True, transform=eval_tf)
+    te_ds = FGVCAircraft(root=data_root, split="test", annotation_level="variant",
+                          download=True, transform=eval_tf)
+
+    return (*make_loaders(tr_ds, va_ds, te_ds, batch_size, num_workers),
+            100, image_size, image_size)
+
+
 # ─── Unified registry ────────────────────────────────────────────────────────
 
 def get_dtd(data_root="./data", batch_size=32, image_size=224,
@@ -280,6 +314,7 @@ DATASET_REGISTRY = {
     "tissuemnist": get_tissuemnist,
     "dtd":         get_dtd,
     "flowers102":  get_flowers102,
+    "fgvc_aircraft": get_fgvc_aircraft,
 }
 
 DATASET_DEFAULTS = {
@@ -291,6 +326,7 @@ DATASET_DEFAULTS = {
     "tissuemnist": dict(image_size=224, batch_size=64),
     "dtd":         dict(image_size=224, batch_size=32),
     "flowers102":  dict(image_size=224, batch_size=32),
+    "fgvc_aircraft": dict(image_size=224, batch_size=32),
 }
 
 
