@@ -164,8 +164,7 @@ def load_checkpoint_at_resolution(ckpt_path: Path, target_resolution: int,
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="bloodmnist",
-                        choices=["eurosat", "bloodmnist", "dermamnist",
-                                 "pathmnist", "resisc45", "dtd"])
+                        choices=["eurosat", "bloodmnist", "dermamnist", "pathmnist", "resisc45", "dtd", "tissuemnist", "flowers102", "fgvc_aircraft"])
     parser.add_argument("--checkpoint_dir", required=True,
                         help="Directory containing .pt checkpoints from viper_v5")
     parser.add_argument("--resolutions", type=int, nargs="+",

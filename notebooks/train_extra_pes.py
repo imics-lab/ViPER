@@ -135,8 +135,7 @@ def train_one_extra_pe(pe_type: str, train_loader, val_loader, test_loader,
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="bloodmnist",
-                        choices=["eurosat", "bloodmnist", "dermamnist",
-                                 "pathmnist", "resisc45", "dtd", "tissuemnist"])
+                        choices=["eurosat", "bloodmnist", "dermamnist", "pathmnist", "resisc45", "dtd", "tissuemnist", "flowers102", "fgvc_aircraft"])
     parser.add_argument("--pe", choices=["rope_mixed", "alibi2d"], required=True,
                         help="Which internal PE to use")
     parser.add_argument("--image_size", type=int, default=224)

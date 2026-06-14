@@ -633,8 +633,7 @@ def load_data_loader_module(data_loader_path: str):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="bloodmnist",
-                        choices=["eurosat", "bloodmnist", "dermamnist",
-                                 "pathmnist", "resisc45", "dtd", "tissuemnist", "flowers102", "aid"])
+                        choices=["eurosat", "bloodmnist", "dermamnist", "pathmnist", "resisc45", "dtd", "tissuemnist", "flowers102", "fgvc_aircraft"])
     parser.add_argument("--image_size", type=int, default=224,
                         help="Image size (default 224 for DeiT-Tiny)")
     parser.add_argument("--patch_size", type=int, default=16,
