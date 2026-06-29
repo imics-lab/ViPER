@@ -1,23 +1,28 @@
-# !pip install -q medmnist
-
 """
-viper_datasets.py
-─────────────────
+data_loader.py
+─────────────────────────────────────────────────────────────────
 Unified dataset loaders for ViPER experiments.
 
-Every loader returns:
+Every loader returns a 6-tuple:
     (train_loader, val_loader, test_loader, num_classes, image_h, image_w)
+
+Public entry point:
+    get_dataset(name, data_root="./data", **kwargs)
+
+Supported datasets (see DATASET_REGISTRY at the bottom):
+    eurosat, resisc45, dtd, flowers102, fgvc_aircraft,
+    pathmnist, bloodmnist, dermamnist, tissuemnist
 """
-import math
+
 from pathlib import Path
-from typing import Tuple
 
 import torch
 import torchvision.transforms as T
 from torch.utils.data import DataLoader, Dataset, Subset
-from torchvision.datasets import EuroSAT, CIFAR100
+from torchvision.datasets import EuroSAT
 
-# ─── Constants ───────────────────────────────────────────────────────────────
+
+# ─── Constants ───────────────────────────────────────────────────────
 SEED = 42
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD  = (0.229, 0.224, 0.225)
@@ -25,9 +30,9 @@ DEFAULT_VAL_SPLIT  = 0.15
 DEFAULT_TEST_SPLIT = 0.15
 
 
-# ─── Utilities ───────────────────────────────────────────────────────────────
+# ─── Utilities ───────────────────────────────────────────────────────
 def make_split(n: int, val_frac: float, test_frac: float, seed: int = SEED):
-    """Deterministic shuffle, return (train_idx, val_idx, test_idx)."""
+    """Deterministic shuffle returning (train_idx, val_idx, test_idx)."""
     g = torch.Generator().manual_seed(seed)
     idx = torch.randperm(n, generator=g).tolist()
     n_test = int(n * test_frac)
@@ -43,7 +48,7 @@ def make_loaders(tr_ds, va_ds, te_ds, batch_size, num_workers=2):
             DataLoader(te_ds, shuffle=False, **kw))
 
 
-# ─── 1. EuroSAT (satellite, 64×64, 10 classes) ───────────────────────────────
+# ─── 1. EuroSAT (satellite, 64×64, 10 classes) ───────────────────────
 def get_eurosat(data_root="./data", batch_size=64, image_size=64,
                 seed=SEED, num_workers=2):
     mean = (0.3444, 0.3803, 0.4078)   # EuroSAT-specific stats
@@ -76,9 +81,9 @@ def get_eurosat(data_root="./data", batch_size=64, image_size=64,
             10, image_size, image_size)
 
 
-# ─── 2. RESISC45 (remote sensing, 256×256, 45 classes) ───────────────────────
+# ─── 2. RESISC45 (remote sensing, 256×256, 45 classes) ───────────────
 class HFImageDataset(Dataset):
-    """Wrap HuggingFace image dataset to behave like ImageFolder."""
+    """Wrap a HuggingFace image dataset to behave like ImageFolder."""
     def __init__(self, hf_ds, transform):
         self.ds = hf_ds
         self.transform = transform
@@ -115,7 +120,6 @@ def get_resisc45(data_root="./data", batch_size=32, image_size=224,
         va_ds = HFImageDataset(ds_full["validation"], eval_tf)
         te_ds = HFImageDataset(ds_full["test"],       eval_tf)
     else:
-        # Fallback: split manually
         full = ds_full["train"]
         tr_i, va_i, te_i = make_split(len(full),
                                       DEFAULT_VAL_SPLIT, DEFAULT_TEST_SPLIT, seed)
@@ -127,7 +131,7 @@ def get_resisc45(data_root="./data", batch_size=32, image_size=224,
             45, image_size, image_size)
 
 
-# ─── 3. MedMNIST family (PathMNIST, BloodMNIST, ...) ─────────────────────────
+# ─── 3. MedMNIST family ──────────────────────────────────────────────
 class _MedMNISTWrap(Dataset):
     """MedMNIST returns labels as shape (1,) ndarray; squeeze to int."""
     def __init__(self, ds): self.ds = ds
@@ -140,7 +144,7 @@ class _MedMNISTWrap(Dataset):
 def get_medmnist(name: str, data_root="./data", batch_size=64,
                  image_size=224, seed=SEED, num_workers=2):
     """
-    name: 'pathmnist' | 'bloodmnist' | 'dermamnist' | etc.
+    name: 'pathmnist' | 'bloodmnist' | 'dermamnist' | 'tissuemnist'.
     See https://medmnist.com/ for full list.
     """
     import medmnist
@@ -171,11 +175,10 @@ def get_medmnist(name: str, data_root="./data", batch_size=64,
     va_full = DataClass(split="val",   transform=eval_tf,  **common)
     te_full = DataClass(split="test",  transform=eval_tf,  **common)
 
-    tr_ds = _MedMNISTWrap(tr_full)
-    va_ds = _MedMNISTWrap(va_full)
-    te_ds = _MedMNISTWrap(te_full)
-
-    return (*make_loaders(tr_ds, va_ds, te_ds, batch_size, num_workers),
+    return (*make_loaders(_MedMNISTWrap(tr_full),
+                           _MedMNISTWrap(va_full),
+                           _MedMNISTWrap(te_full),
+                           batch_size, num_workers),
             n_classes, image_size, image_size)
 
 
@@ -192,23 +195,19 @@ def get_dermamnist(data_root="./data", batch_size=64, image_size=224, **kw):
 
 
 def get_tissuemnist(data_root="./data", batch_size=64, image_size=224, **kw):
-    """TissueMNIST — kidney microscopy, 8 classes, 236k images."""
+    """TissueMNIST — kidney microscopy, 8 classes, 236K images."""
     return get_medmnist("tissuemnist", data_root, batch_size, image_size, **kw)
 
 
+# ─── 4. DTD (Describable Textures, 47 classes) ───────────────────────
+def get_dtd(data_root="./data", batch_size=32, image_size=224,
+            seed=SEED, num_workers=2):
+    """Describable Textures Dataset — 47 classes, ~5,640 images.
 
-
-
-def get_flowers102(data_root="./data", batch_size=32, image_size=224,
-                   seed=SEED, num_workers=2):
-    """Oxford Flowers-102 — 102 flower species, ~8k images, native ~500-700px.
-
-    Uses torchvision's Flowers102. Note: dataset convention is unusual ---
-    'train' is 1,020 images, 'val' is 1,020, 'test' is 6,149. We follow the
-    convention used by most ViT papers: use 'test' as our train set, since
-    the 1,020-image 'train' split is too small to train ViTs from scratch.
+    Uses torchvision's built-in DTD with official partition split 1.
     """
-    from torchvision.datasets import Flowers102
+    from torchvision.datasets import DTD
+
     train_tf = T.Compose([
         T.Resize((image_size, image_size)),
         T.RandomHorizontalFlip(),
@@ -223,25 +222,57 @@ def get_flowers102(data_root="./data", batch_size=32, image_size=224,
         T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
     ])
 
-    # Use 'test' as train, 'val' as val, 'train' as test (ViT convention)
-    tr_ds = Flowers102(root=data_root, split="test", download=True,
-                        transform=train_tf)
-    va_ds = Flowers102(root=data_root, split="val", download=True,
-                        transform=eval_tf)
-    te_ds = Flowers102(root=data_root, split="train", download=True,
-                        transform=eval_tf)
+    tr_ds = DTD(root=data_root, split="train", partition=1,
+                transform=train_tf, download=True)
+    va_ds = DTD(root=data_root, split="val",   partition=1,
+                transform=eval_tf,  download=True)
+    te_ds = DTD(root=data_root, split="test",  partition=1,
+                transform=eval_tf,  download=True)
+
+    return (*make_loaders(tr_ds, va_ds, te_ds, batch_size, num_workers),
+            47, image_size, image_size)
+
+
+# ─── 5. Flowers102 ───────────────────────────────────────────────────
+def get_flowers102(data_root="./data", batch_size=32, image_size=224,
+                   seed=SEED, num_workers=2):
+    """Oxford Flowers-102 — 102 species, ~8K images.
+
+    Note: the standard Flowers102 'train' split has only 1,020 images,
+    which is too small for from-scratch ViT training. Following the ViT
+    convention, we use 'test' as our training set (6,149 images), and
+    'train' (1,020) as our test set.
+    """
+    from torchvision.datasets import Flowers102
+
+    train_tf = T.Compose([
+        T.Resize((image_size, image_size)),
+        T.RandomHorizontalFlip(),
+        T.RandomVerticalFlip(),
+        T.ColorJitter(0.2, 0.2, 0.1),
+        T.ToTensor(),
+        T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+    ])
+    eval_tf = T.Compose([
+        T.Resize((image_size, image_size)),
+        T.ToTensor(),
+        T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
+    ])
+
+    tr_ds = Flowers102(root=data_root, split="test",  download=True, transform=train_tf)
+    va_ds = Flowers102(root=data_root, split="val",   download=True, transform=eval_tf)
+    te_ds = Flowers102(root=data_root, split="train", download=True, transform=eval_tf)
 
     return (*make_loaders(tr_ds, va_ds, te_ds, batch_size, num_workers),
             102, image_size, image_size)
 
 
-
+# ─── 6. FGVC Aircraft ────────────────────────────────────────────────
 def get_fgvc_aircraft(data_root="./data", batch_size=32, image_size=224,
-                     seed=SEED, num_workers=2):
-    """FGVC Aircraft — 100 fine-grained aircraft types, ~10k images, native ~1000+px.
+                       seed=SEED, num_workers=2):
+    """FGVC Aircraft — 100 fine-grained aircraft variants, ~10K images.
 
-    Auto-downloads via torchvision (~3 GB). Standard train/val/test splits.
-    Uses the 'variant' label (100 classes, finest granularity).
+    Uses torchvision FGVCAircraft with the 'variant' label (finest level).
     """
     from torchvision.datasets import FGVCAircraft
 
@@ -260,90 +291,55 @@ def get_fgvc_aircraft(data_root="./data", batch_size=32, image_size=224,
 
     tr_ds = FGVCAircraft(root=data_root, split="train", annotation_level="variant",
                           download=True, transform=train_tf)
-    va_ds = FGVCAircraft(root=data_root, split="val", annotation_level="variant",
+    va_ds = FGVCAircraft(root=data_root, split="val",   annotation_level="variant",
                           download=True, transform=eval_tf)
-    te_ds = FGVCAircraft(root=data_root, split="test", annotation_level="variant",
+    te_ds = FGVCAircraft(root=data_root, split="test",  annotation_level="variant",
                           download=True, transform=eval_tf)
 
     return (*make_loaders(tr_ds, va_ds, te_ds, batch_size, num_workers),
             100, image_size, image_size)
 
 
-# ─── Unified registry ────────────────────────────────────────────────────────
-
-def get_dtd(data_root="./data", batch_size=32, image_size=224,
-            seed=SEED, num_workers=2):
-    """Describable Textures Dataset — 47 classes, ~5640 images.
-
-    Uses torchvision's built-in DTD dataset with official split 1 (standard).
-    """
-    from torchvision.datasets import DTD
-
-    train_tf = T.Compose([
-        T.Resize((image_size, image_size)),
-        T.RandomHorizontalFlip(),
-        T.RandomVerticalFlip(),
-        T.ColorJitter(0.2, 0.2, 0.1),
-        T.ToTensor(),
-        T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
-    ])
-    eval_tf = T.Compose([
-        T.Resize((image_size, image_size)),
-        T.ToTensor(),
-        T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
-    ])
-
-    # DTD provides official partition splits 1-10; we use split 1
-    tr_ds = DTD(root=data_root, split="train",      partition=1,
-                transform=train_tf, download=True)
-    va_ds = DTD(root=data_root, split="val",        partition=1,
-                transform=eval_tf,  download=True)
-    te_ds = DTD(root=data_root, split="test",       partition=1,
-                transform=eval_tf,  download=True)
-
-    return (*make_loaders(tr_ds, va_ds, te_ds, batch_size, num_workers),
-            47, image_size, image_size)
-
-
+# ─── Unified registry ────────────────────────────────────────────────
 DATASET_REGISTRY = {
-    "eurosat":     get_eurosat,
-    "resisc45":    get_resisc45,
-    "pathmnist":   get_pathmnist,
-    "bloodmnist":  get_bloodmnist,
-    "dermamnist":  get_dermamnist,
-    "tissuemnist": get_tissuemnist,
-    "dtd":         get_dtd,
-    "flowers102":  get_flowers102,
+    "eurosat":       get_eurosat,
+    "resisc45":      get_resisc45,
+    "pathmnist":     get_pathmnist,
+    "bloodmnist":    get_bloodmnist,
+    "dermamnist":    get_dermamnist,
+    "tissuemnist":   get_tissuemnist,
+    "dtd":           get_dtd,
+    "flowers102":    get_flowers102,
     "fgvc_aircraft": get_fgvc_aircraft,
 }
 
 DATASET_DEFAULTS = {
-    "eurosat":     dict(image_size=64,  batch_size=64),
-    "resisc45":    dict(image_size=224, batch_size=32),
-    "pathmnist":   dict(image_size=224, batch_size=64),
-    "bloodmnist":  dict(image_size=224, batch_size=64),
-    "dermamnist":  dict(image_size=224, batch_size=64),
-    "tissuemnist": dict(image_size=224, batch_size=64),
-    "dtd":         dict(image_size=224, batch_size=32),
-    "flowers102":  dict(image_size=224, batch_size=32),
+    "eurosat":       dict(image_size=64,  batch_size=64),
+    "resisc45":      dict(image_size=224, batch_size=32),
+    "pathmnist":     dict(image_size=224, batch_size=64),
+    "bloodmnist":    dict(image_size=224, batch_size=64),
+    "dermamnist":    dict(image_size=224, batch_size=64),
+    "tissuemnist":   dict(image_size=224, batch_size=64),
+    "dtd":           dict(image_size=224, batch_size=32),
+    "flowers102":    dict(image_size=224, batch_size=32),
     "fgvc_aircraft": dict(image_size=224, batch_size=32),
 }
 
 
 def get_dataset(name: str, data_root="./data", **kwargs):
-    """Single entry point: returns (train, val, test, n_cls, h, w)."""
+    """Single entry point: returns (train, val, test, n_cls, h, w).
+
+    Example:
+        train, val, test, n_cls, h, w = get_dataset("bloodmnist",
+                                                    data_root="./data",
+                                                    batch_size=64,
+                                                    image_size=224)
+    """
     if name not in DATASET_REGISTRY:
-        raise ValueError(f"Unknown dataset '{name}'. Available: {list(DATASET_REGISTRY)}")
+        raise ValueError(
+            f"Unknown dataset '{name}'. Available: {list(DATASET_REGISTRY)}"
+        )
     defaults = dict(DATASET_DEFAULTS[name])
     defaults.update(kwargs)
     defaults["data_root"] = data_root
     return DATASET_REGISTRY[name](**defaults)
-
-# for name in ["bloodmnist"]:
-#    train, val, test, n_cls, h, w = get_dataset(name)
-#    print(f"{name}: {n_cls} classes, {h}×{w}, "
-#          f"tr={len(train.dataset):,} va={len(val.dataset):,} te={len(test.dataset):,}")
-
-
-# ─── 4. DTD (Describable Textures Dataset) ──────────────────────────────────
-

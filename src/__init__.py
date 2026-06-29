@@ -1,38 +1,41 @@
 """
-DyWPE: Dynamic Wavelet Positional Encoding
+ViPER: Vision Positional Encoding with Multi-scale Dynamic Wavelet Encoding.
 
-A signal-aware positional encoding framework for time series transformers.
+Public API:
+    from viper import (
+        ViPERConfig, ViPERFeatureExtractor,
+        DeiTWithCustomPE, make_pe_dynamic,
+        train_one, train_one_multires,
+        evaluate, build_model, set_seed,
+    )
 """
 
-# Core imports
-from .core.dywpe import DyWPE
-from .core.position_encodings import tAPE, LearnedPositionalEncoding, FixedPositionalEncoding, ConvSPE, TemporalPositionalEncoding, RelativePositionalEncoding, RotaryPositionalEncoding
+from .viper import ViPERConfig, ViPERFeatureExtractor, ChannelProjection
 
-# Model imports
-from .models.transformer import TimeSeriesTransformer, create_model_with_dywpe
-from .models.embeddings import TimeSeriesPatchEmbeddingLayer
+from .pe_methods import (
+    NoPE, LearnedPE, SinCos2DPE, Relative2DPE, CPE, PerBlockPEG,
+)
 
-# Ablation study imports
-from .ablation.benchmark import PositionalEncodingBenchmark
-from .ablation.signal_awareness import StaticWaveletPE, run_signal_awareness_ablation
-from .ablation.multiscale import SingleScaleDyWPE, GatedConvolutionalPE, run_multiscale_ablation
+from .extra_pes import (
+    RoPEMixed2D, ALiBi2D, CustomAttention, apply_internal_pe_to_deit,
+)
+
+from .model import DeiTWithCustomPE, make_pe_dynamic
+
+from .trainer import (
+    set_seed, compute_metrics, evaluate,
+    build_model, train_one, train_one_multires,
+    load_data_loader_module,
+    INTERNAL_PE_TYPES, MULTIRES_SUPPORTED,
+)
 
 __all__ = [
-    # Core components
-    "scr",
-    
-    # Models
-    "TimeSeriesTransformer",
-    "create_model_with_dywpe", 
-    "TimeSeriesPatchEmbeddingLayer",
-    
-    # Benchmark
-    "PositionalEncodingBenchmark",
-    
-    # Ablation studies
-    "StaticWaveletPE",
-    "SingleScaleDyWPE",
-    "GatedConvolutionalPE",
-    "run_signal_awareness_ablation",
-    "run_multiscale_ablation",
+    "ViPERConfig", "ViPERFeatureExtractor", "ChannelProjection",
+    "NoPE", "LearnedPE", "SinCos2DPE", "Relative2DPE", "CPE", "PerBlockPEG",
+    "RoPEMixed2D", "ALiBi2D", "CustomAttention", "apply_internal_pe_to_deit",
+    "DeiTWithCustomPE", "make_pe_dynamic",
+    "set_seed", "compute_metrics", "evaluate",
+    "build_model", "train_one", "train_one_multires",
+    "load_data_loader_module",
+    "INTERNAL_PE_TYPES", "MULTIRES_SUPPORTED",
 ]
