@@ -1,6 +1,5 @@
 ## ViPER: Vision Positional Encoding with Multiscale Dynamic Wavelet Encoding
 
-**Anonymous WACV 2027 submission - Paper ID 1784**
 
 Code release for the paper *"ViPER: Vision Positional Encoding with Multiscale
 Dynamic Wavelet Encoding."*
