@@ -9,7 +9,7 @@ Dynamic Wavelet Encoding."*
 ### Repository structure
 
 ```
-viper-wacv2027/
+viper/
 ├── README.md
 ├── LICENSE                       MIT (post-publication)
 ├── requirements.txt              Pinned dependencies
@@ -214,10 +214,4 @@ After every batch of runs, a summary file `summary_<pe>.json` is also
 written at the top level of `outputs/<dataset>/`.
 
 
-
-## License
-
-MIT (see `LICENSE`). Released for the purpose of reproducing paper
-results during the WACV 2027 review period; a public open-source release
-will follow publication.
 
